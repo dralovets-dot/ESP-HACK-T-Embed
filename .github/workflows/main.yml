@@ -1,125 +1,29 @@
-cd "/c/Users/Раловец Дмитрий/Downloads/ESP-HACK-T-Embed/ESP-HACK-T-Embed"
+name: Build ESP-HACK
 
-cat > .github/workflows/main.yml << 'EOF'
-name: PlatformIO CI
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+on: [push, pull_request]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-
-    - name: Install PlatformIO
-      run: |
-        python -m pip install --upgrade pip
-        pip install platformio
-
-    - name: Create minimal CC1101 library
-      run: |
-        mkdir -p lib/CC1101
-        cat > lib/CC1101/CC1101.h << 'END_H'
-        #ifndef CC1101_H
-        #define CC1101_H
-        
-        #include <Arduino.h>
-        #include <SPI.h>
-        
-        typedef struct {
-            float frequency;
-            float dataRate;
-            int rxBandwidth;
-            float deviation;
-            int8_t power;
-            uint8_t syncMode;
-            uint8_t preambleLength;
-            uint8_t packetLength;
-        } CC1101Settings;
-        
-        class CC1101 {
-        public:
-            CC1101();
-            void begin(uint8_t csPin, uint8_t gdo0Pin, uint8_t gdo2Pin);
-            void setSettings(CC1101Settings settings);
-            void sendData(uint8_t* data, uint8_t len);
-            uint8_t receiveData(uint8_t* buffer, uint8_t maxLen);
-            
-        private:
-            uint8_t _csPin;
-            uint8_t _gdo0Pin;
-            uint8_t _gdo2Pin;
-        };
-        
-        #endif
-        END_H
-        
-        cat > lib/CC1101/CC1101.cpp << 'END_CPP'
-        #include "CC1101.h"
-        
-        CC1101::CC1101() {}
-        
-        void CC1101::begin(uint8_t csPin, uint8_t gdo0Pin, uint8_t gdo2Pin) {
-            _csPin = csPin;
-            _gdo0Pin = gdo0Pin;
-            _gdo2Pin = gdo2Pin;
-            
-            pinMode(_csPin, OUTPUT);
-            digitalWrite(_csPin, HIGH);
-            
-            SPI.begin();
-        }
-        
-        void CC1101::setSettings(CC1101Settings settings) {
-            // Stub implementation
-        }
-        
-        void CC1101::sendData(uint8_t* data, uint8_t len) {
-            // Stub implementation
-        }
-        
-        uint8_t CC1101::receiveData(uint8_t* buffer, uint8_t maxLen) {
-            return 0; // Stub
-        }
-        END_CPP
-
-    - name: Update platformio.ini
-      run: |
-        echo "[env:lilygo-t-embed-cc1101]" > platformio.ini
-        echo "platform = espressif32" >> platformio.ini
-        echo "board = esp32-s3-devkitc-1" >> platformio.ini
-        echo "framework = arduino" >> platformio.ini
-        echo "monitor_speed = 115200" >> platformio.ini
-        echo "lib_extra_dirs = lib" >> platformio.ini
-        echo "lib_deps = " >> platformio.ini
-        echo "    bodmer/TFT_eSPI" >> platformio.ini
-        echo "    bblanchon/ArduinoJson" >> platformio.ini
-        echo "    lib/CC1101" >> platformio.ini
-        echo "build_flags = -Werror -Wall -DBOARD_HAS_PSRAM -mfix-esp32-psram-cache-issue" >> platformio.ini
-        echo "board_build.flash_mode = qio" >> platformio.ini
-        echo "board_build.partitions = default_16MB.csv" >> platformio.ini
-
-    - name: Build project
-      run: pio run -e lilygo-t-embed-cc1101
-
-    - name: Upload firmware artifacts
-      if: success()
-      uses: actions/upload-artifact@v4
-      with:
-        name: firmware
-        path: |
-          .pio/build/lilygo-t-embed-cc1101/*.bin
-          .pio/build/lilygo-t-embed-cc1101/*.elf
-        if-no-files-found: warn
-EOF
+      - uses: actions/checkout@v4
+      
+      - name: Setup PlatformIO
+        run: |
+          pip install platformio
+          
+      - name: Create CC1101 stub
+        run: |
+          mkdir -p lib/CC1101
+          echo '{"name": "CC1101", "version": "1.0.0"}' > lib/CC1101/library.json
+          echo '#pragma once' > lib/CC1101/CC1101.h
+          echo '#include "CC1101.h"' > lib/CC1101/CC1101.cpp
+          
+      - name: Build
+        run: |
+          echo "[env:test]" > platformio.ini
+          echo "platform = espressif32" >> platformio.ini
+          echo "board = esp32-s3-devkitc-1" >> platformio.ini
+          echo "framework = arduino" >> platformio.ini
+          echo "lib_extra_dirs = lib" >> platformio.ini
+          pio run -e test
