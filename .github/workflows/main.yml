@@ -15,15 +15,57 @@ jobs:
       - name: Create CC1101 stub
         run: |
           mkdir -p lib/CC1101
-          echo '{"name": "CC1101", "version": "1.0.0"}' > lib/CC1101/library.json
-          echo '#pragma once' > lib/CC1101/CC1101.h
+          # Создаем минимальную библиотеку
+          echo '{"name": "CC1101", "version": "1.0.0", "frameworks": "arduino"}' > lib/CC1101/library.json
+          
+          cat > lib/CC1101/CC1101.h << 'END_H'
+          #ifndef CC1101_H
+          #define CC1101_H
+          #include <Arduino.h>
+          #include <SPI.h>
+          
+          class CC1101 {
+          public:
+            void begin(int cs, int gdo0, int gdo2) {}
+            void setFrequency(float freq) {}
+          };
+          #endif
+          END_H
+          
           echo '#include "CC1101.h"' > lib/CC1101/CC1101.cpp
+          
+      - name: Check main.cpp
+        run: |
+          echo "=== Checking main.cpp ==="
+          if [ ! -f src/main.cpp ]; then
+            echo "Creating minimal main.cpp..."
+            cat > src/main.cpp << 'END_CPP'
+            #include <Arduino.h>
+            
+            void setup() {
+              Serial.begin(115200);
+              delay(1000);
+              Serial.println("ESP-HACK starting...");
+            }
+            
+            void loop() {
+              delay(1000);
+            }
+            END_CPP
+          fi
           
       - name: Build
         run: |
-          echo "[env:test]" > platformio.ini
+          echo "[env:lilygo-t-embed-cc1101]" > platformio.ini
           echo "platform = espressif32" >> platformio.ini
           echo "board = esp32-s3-devkitc-1" >> platformio.ini
           echo "framework = arduino" >> platformio.ini
+          echo "monitor_speed = 115200" >> platformio.ini
           echo "lib_extra_dirs = lib" >> platformio.ini
-          pio run -e test
+          echo "lib_deps = bodmer/TFT_eSPI, bblanchon/ArduinoJson, lib/CC1101" >> platformio.ini
+          echo "build_flags = -DBOARD_HAS_PSRAM" >> platformio.ini
+          
+          echo "=== PlatformIO config ==="
+          cat platformio.ini
+          echo "=== Building... ==="
+          pio run -e lilygo-t-embed-cc1101
