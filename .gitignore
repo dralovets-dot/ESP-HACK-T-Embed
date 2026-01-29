@@ -1,0 +1,19 @@
+# PlatformIO
+.pio
+.pioenvs
+.piolibdeps
+
+# VS Code
+.vscode/
+
+# System
+.DS_Store
+Thumbs.db
+
+# Project
+*.bin
+*.elf
+*.map
+*.log
+build/
+dist/
