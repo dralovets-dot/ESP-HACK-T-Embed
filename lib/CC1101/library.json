@@ -1,0 +1,12 @@
+{
+  "name": "CC1101",
+  "version": "1.0.0",
+  "keywords": "cc1101, radio, rf",
+  "description": "CC1101 radio driver stub for compilation",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dralovets-dot/ESP-HACK-T-Embed"
+  },
+  "frameworks": "arduino",
+  "platforms": "espressif32"
+}
