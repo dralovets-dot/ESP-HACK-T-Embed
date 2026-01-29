@@ -1,13 +1,52 @@
-name: Build ESP-HACK-T-Embed
+name: PlatformIO CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Build
-        run: |
-          pip install platformio
-          pio run
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install PlatformIO
+      run: |
+        python -m pip install --upgrade pip
+        pip install platformio
+
+    - name: Download CC1101 library manually
+      run: |
+        # Создаем папку для библиотеки
+        mkdir -p lib/CC1101
+        # Скачиваем с альтернативного источника
+        wget https://raw.githubusercontent.com/LSatan/SmartRC-CC1101-Driver-Lib/master/CC1101.h -O lib/CC1101/CC1101.h
+        wget https://raw.githubusercontent.com/LSatan/SmartRC-CC1101-Driver-Lib/master/CC1101.cpp -O lib/CC1101/CC1101.cpp
+        
+    - name: Update platformio.ini for local library
+      run: |
+        echo "[env:lilygo-t-embed-cc1101]" > platformio.ini
+        echo "platform = espressif32" >> platformio.ini
+        echo "board = esp32-s3-devkitc-1" >> platformio.ini
+        echo "framework = arduino" >> platformio.ini
+        echo "monitor_speed = 115200" >> platformio.ini
+        echo "lib_extra_dirs = lib" >> platformio.ini
+        echo "lib_deps = " >> platformio.ini
+        echo "    bodmer/TFT_eSPI" >> platformio.ini
+        echo "    bblanchon/ArduinoJson" >> platformio.ini
+        echo "    lib/CC1101" >> platformio.ini
+        echo "build_flags = -Werror -Wall -DBOARD_HAS_PSRAM -mfix-esp32-psram-cache-issue" >> platformio.ini
+        echo "board_build.flash_mode = qio" >> platformio.ini
+        echo "board_build.partitions = default_16MB.csv" >> platformio.ini
+
+    - name: Build project
+      run: pio run -e lilygo-t-embed-cc1101
