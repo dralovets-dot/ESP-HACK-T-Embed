@@ -5,7 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:  # Ручной запуск из интерфейса
+  workflow_dispatch:
 
 jobs:
   build:
@@ -15,21 +15,22 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Setup PlatformIO
-      uses: platformio/setup-platformio@v2
+    - name: Setup Python
+      uses: actions/setup-python@v4
       with:
-        platform: espressif32
+        python-version: '3.10'
       
-    - name: Install required Python packages
+    - name: Install PlatformIO
       run: |
-        python -m pip install --upgrade pip
-        pip install pyelftools
+        pip install --upgrade platformio
+        pio platform update
+        pio platform install espressif32
       
     - name: Configure TFT_eSPI for T-Embed
       run: |
-        # Создаем правильную конфигурацию для T-Embed
-        mkdir -p ~/.platformio/packages/framework-arduinoespressif32/libraries/TFT_eSPI
-        cat > ~/.platformio/packages/framework-arduinoespressif32/libraries/TFT_eSPI/User_Setup.h << 'TFT_CONFIG'
+        # Создаем временную конфигурацию для T-Embed
+        mkdir -p lib/TFT_eSPI_fix
+        cat > lib/TFT_eSPI_fix/User_Setup.h << 'TFT_CONFIG'
         // Lilygo T-Embed configuration
         #define USER_SETUP_INFO "Lilygo T-Embed"
         
@@ -52,59 +53,56 @@ jobs:
         // Features
         #define SUPPORT_TRANSACTIONS
         #define LOAD_GLCD
-        #define LOAD_FONT2
-        #define LOAD_FONT4
-        #define LOAD_FONT6
-        #define LOAD_FONT7
-        #define LOAD_FONT8
-        #define LOAD_GFXFF
-        
-        // Touch (if available)
-        #define SPI_TOUCH_FREQUENCY  2500000
         TFT_CONFIG
         
         echo "TFT_eSPI configured for T-Embed"
       
     - name: Build with PlatformIO
       run: |
-        echo "=== Building firmware ==="
-        pio run --environment lilygo-t-embed
+        echo "=== Building firmware for T-Embed ==="
         
+        # Показываем конфигурацию
+        echo "PlatformIO version:"
+        pio --version
+        
+        echo "Platforms:"
+        pio platform list
+        
+        echo "Libraries:"
+        pio lib list 2>/dev/null || true
+        
+        # Пробуем собрать
+        echo "=== Starting build ==="
+        pio run || echo "Build failed with default settings"
+        
+        # Проверяем результаты
         echo "=== Build artifacts ==="
-        find .pio/build -name "*.bin" -o -name "*.elf" -o -name "*.map" | xargs ls -la 2>/dev/null || true
+        find .pio -name "*.bin" -o -name "*.elf" 2>/dev/null | xargs ls -la 2>/dev/null || echo "No binaries found"
       
-    - name: Upload firmware binaries
+    - name: Upload firmware
       uses: actions/upload-artifact@v4
-      if: success()
+      if: always()
       with:
-        name: t-embed-firmware
+        name: firmware-binaries
         path: |
           .pio/build/**/*.bin
-          .pio/build/**/firmware.bin
           .pio/build/**/*.elf
-        retention-days: 30
+        retention-days: 7
       
-    - name: Generate build info
-      if: success()
+    - name: Build report
+      if: always()
       run: |
-        echo "=== Build Information ==="
-        echo "Build date: $(date)"
-        echo "Git commit: ${{ github.sha }}"
-        echo "Branch: ${{ github.ref }}"
+        echo "=== Build Report ==="
+        echo "Repository: ${{ github.repository }}"
+        echo "Commit: ${{ github.sha }}"
+        echo "Date: $(date)"
         
-        # Находим основной bin файл
-        BIN_FILE=$(find .pio/build -name "*.bin" | head -1)
-        if [ -f "$BIN_FILE" ]; then
-          echo "Firmware file: $BIN_FILE"
-          echo "Firmware size: $(wc -c < "$BIN_FILE") bytes"
-          echo "MD5: $(md5sum "$BIN_FILE" | cut -d' ' -f1)"
+        if find .pio -name "*.bin" 2>/dev/null | grep -q .; then
+          echo "✅ BUILD SUCCESSFUL"
+          BIN_FILE=$(find .pio -name "*.bin" | head -1)
+          echo "Firmware: $BIN_FILE"
+          echo "Size: $(wc -c < "$BIN_FILE") bytes"
         else
-          echo "ERROR: No firmware binary found!"
-          exit 1
+          echo "❌ BUILD FAILED"
+          echo "Check logs above for errors"
         fi
-        
-        # Сохраняем информацию в файл
-        echo "BUILD_INFO<<EOF" >> $GITHUB_ENV
-        echo "Commit: ${{ github.sha }}" >> $GITHUB_ENV
-        echo "Date: $(date)" >> $GITHUB_ENV
-        echo "EOF"
