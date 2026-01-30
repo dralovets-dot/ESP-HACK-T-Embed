@@ -1,0 +1,110 @@
+name: Build T-Embed Firmware
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Ручной запуск из интерфейса
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup PlatformIO
+      uses: platformio/setup-platformio@v2
+      with:
+        platform: espressif32
+      
+    - name: Install required Python packages
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyelftools
+      
+    - name: Configure TFT_eSPI for T-Embed
+      run: |
+        # Создаем правильную конфигурацию для T-Embed
+        mkdir -p ~/.platformio/packages/framework-arduinoespressif32/libraries/TFT_eSPI
+        cat > ~/.platformio/packages/framework-arduinoespressif32/libraries/TFT_eSPI/User_Setup.h << 'TFT_CONFIG'
+        // Lilygo T-Embed configuration
+        #define USER_SETUP_INFO "Lilygo T-Embed"
+        
+        // Display pins
+        #define TFT_CS   5
+        #define TFT_DC   15
+        #define TFT_RST  -1
+        #define TFT_BL   38
+        
+        // Display settings
+        #define TFT_WIDTH   170
+        #define TFT_HEIGHT  320
+        #define TFT_ROTATION 1
+        
+        // SPI settings
+        #define TFT_SPI_PORT 1
+        #define SPI_FREQUENCY  40000000
+        #define SPI_READ_FREQUENCY  20000000
+        
+        // Features
+        #define SUPPORT_TRANSACTIONS
+        #define LOAD_GLCD
+        #define LOAD_FONT2
+        #define LOAD_FONT4
+        #define LOAD_FONT6
+        #define LOAD_FONT7
+        #define LOAD_FONT8
+        #define LOAD_GFXFF
+        
+        // Touch (if available)
+        #define SPI_TOUCH_FREQUENCY  2500000
+        TFT_CONFIG
+        
+        echo "TFT_eSPI configured for T-Embed"
+      
+    - name: Build with PlatformIO
+      run: |
+        echo "=== Building firmware ==="
+        pio run --environment lilygo-t-embed
+        
+        echo "=== Build artifacts ==="
+        find .pio/build -name "*.bin" -o -name "*.elf" -o -name "*.map" | xargs ls -la 2>/dev/null || true
+      
+    - name: Upload firmware binaries
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: t-embed-firmware
+        path: |
+          .pio/build/**/*.bin
+          .pio/build/**/firmware.bin
+          .pio/build/**/*.elf
+        retention-days: 30
+      
+    - name: Generate build info
+      if: success()
+      run: |
+        echo "=== Build Information ==="
+        echo "Build date: $(date)"
+        echo "Git commit: ${{ github.sha }}"
+        echo "Branch: ${{ github.ref }}"
+        
+        # Находим основной bin файл
+        BIN_FILE=$(find .pio/build -name "*.bin" | head -1)
+        if [ -f "$BIN_FILE" ]; then
+          echo "Firmware file: $BIN_FILE"
+          echo "Firmware size: $(wc -c < "$BIN_FILE") bytes"
+          echo "MD5: $(md5sum "$BIN_FILE" | cut -d' ' -f1)"
+        else
+          echo "ERROR: No firmware binary found!"
+          exit 1
+        fi
+        
+        # Сохраняем информацию в файл
+        echo "BUILD_INFO<<EOF" >> $GITHUB_ENV
+        echo "Commit: ${{ github.sha }}" >> $GITHUB_ENV
+        echo "Date: $(date)" >> $GITHUB_ENV
+        echo "EOF"
